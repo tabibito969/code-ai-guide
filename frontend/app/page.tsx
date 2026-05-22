@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import FileTree from '../components/FileTree';
 import MermaidView from '../components/MermaidView';
 import './globals.css';
@@ -91,7 +93,13 @@ export default function HomePage() {
           <div className="card">
             <h2>代码解释</h2>
             {selectedFile && <p><span className="badge">{selectedFile}</span></p>}
-            <pre>{explanation || '点击左侧文件或学习路径开始解释。'}</pre>
+            <div className="markdown-content">
+              {explanation ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{explanation}</ReactMarkdown>
+              ) : (
+                <p>点击左侧文件或学习路径开始解释。</p>
+              )}
+            </div>
           </div>
         </section>
       )}

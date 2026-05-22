@@ -8,7 +8,7 @@ type TreeNode = {
 };
 
 export default function FileTree({ nodes, onSelect }: { nodes: TreeNode[]; onSelect: (path: string) => void }) {
-  return <div>{nodes.map((node) => <Node key={node.path} node={node} onSelect={onSelect} />)}</div>;
+  return <div className="tree-container">{nodes.map((node) => <Node key={node.path} node={node} onSelect={onSelect} />)}</div>;
 }
 
 function Node({ node, onSelect }: { node: TreeNode; onSelect: (path: string) => void }) {
