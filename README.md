@@ -13,22 +13,36 @@
 - 支持接入 DeepSeek API 做代码解释
 - 提供 Next.js 前端界面
 
+## 环境要求
+
+- **Python** 3.11 ~ 3.13（3.14 因 pydantic-core 兼容性问题暂不支持）
+- **Node.js** 18+
+- **Git**
+
 ## 一、启动后端
 
 ```bash
 cd backend
+
+# 创建虚拟环境
 python -m venv .venv
-source .venv/bin/activate  # Windows 用 .venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+# Windows
+.venv\Scripts\activate
+
+# 安装依赖
 pip install -r requirements.txt
+
+# 配置环境变量（首次需要）
 cp .env.example .env
+# 编辑 .env 填入 DEEPSEEK_API_KEY（可选，不填则返回本地静态解释）
+
+# 启动
 uvicorn app.main:app --reload --port 8000
 ```
 
-后端地址：
-
-```text
-http://localhost:8000
-```
+后端地址：http://localhost:8000
 
 ## 二、启动前端
 
@@ -38,11 +52,7 @@ npm install
 npm run dev
 ```
 
-前端地址：
-
-```text
-http://localhost:3000
-```
+前端地址：http://localhost:3000
 
 ## 三、DeepSeek 配置
 

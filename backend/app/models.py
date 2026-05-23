@@ -17,3 +17,4 @@ class AnalyzeResponse(BaseModel):
     files: list[dict[str, Any]]
     mermaid: str
     learning_path: list[str]
+    dependency_graph: str = ""

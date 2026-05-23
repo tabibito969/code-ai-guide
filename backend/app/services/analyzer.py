@@ -1,8 +1,8 @@
 import ast
+import json
 import re
 from pathlib import Path
 from typing import Any
-
 SUPPORTED_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx"}
 IGNORE_PARTS = {".git", "node_modules", "dist", "build", "__pycache__", ".next", ".venv", "venv"}
 
@@ -39,6 +39,11 @@ def language_from_suffix(suffix: str) -> str:
 
 def analyze_python(source: str) -> dict[str, Any]:
     data: dict[str, Any] = {"classes": [], "functions": [], "imports": []}
+    lines = source.splitlines()
+    data["total_lines"] = len(lines)
+    data["blank_lines"] = sum(1 for l in lines if not l.strip())
+    data["comment_lines"] = sum(1 for l in lines if l.strip().startswith("#"))
+
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -57,21 +62,65 @@ def analyze_python(source: str) -> dict[str, Any]:
             data["imports"].append(module)
     return data
 
-
 def analyze_js_ts(source: str) -> dict[str, Any]:
-    class_names = re.findall(r"class\s+([A-Za-z_$][\w$]*)", source)
-    function_names = re.findall(r"function\s+([A-Za-z_$][\w$]*)\s*\(", source)
-    arrow_names = re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>", source)
-    imports = re.findall(r"import\s+(?:.+?\s+from\s+)?['\"]([^'\"]+)['\"]", source)
+    """用正则分析 JS/TS 文件，支持更多语法模式。"""
+    classes: list[dict] = []
+    functions: list[dict] = []
+    imports: list[str] = []
+
+    lines = source.splitlines()
+    total_lines = len(lines)
+    blank_lines = sum(1 for l in lines if not l.strip())
+    comment_lines = sum(1 for l in lines if l.strip().startswith("//") or l.strip().startswith("/*") or l.strip().startswith("*"))
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        # 类声明（含 extends）
+        m = re.match(r"(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)", stripped)
+        if m:
+            classes.append({"name": m.group(1), "line": i})
+            continue
+
+        # 函数声明
+        m = re.match(r"(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[\(<]", stripped)
+        if m:
+            functions.append({"name": m.group(1), "line": i})
+            continue
+
+        # 箭头函数: const/let/var name = ... => / function
+        m = re.match(r"(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?", stripped)
+        if m and ("=>" in stripped or "function" in stripped):
+            functions.append({"name": m.group(1), "line": i})
+            continue
+
+        # 方法定义: name(...) { 或 async name(...) {
+        m = re.match(r"(?:async\s+)?([A-Za-z_$][\w$]*)\s*[\(<].*\)?\s*\{", stripped)
+        if m and m.group(1) not in ("if", "for", "while", "switch", "catch", "return"):
+            functions.append({"name": m.group(1), "line": i})
+            continue
+
+        # import ... from '...'
+        m = re.findall(r"import\s+(?:type\s+)?(?:.+?\s+from\s+)?['\"]([^'\"]+)['\"]", stripped)
+        if m:
+            imports.extend(m)
+            continue
+
+        # require('...')
+        m = re.findall(r"require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)", stripped)
+        if m:
+            imports.extend(m)
 
     return {
-        "classes": [{"name": name, "line": 0} for name in class_names],
-        "functions": [{"name": name, "line": 0} for name in function_names + arrow_names],
+        "classes": classes,
+        "functions": functions,
         "imports": imports,
+        "total_lines": total_lines,
+        "blank_lines": blank_lines,
+        "comment_lines": comment_lines,
     }
 
-
-MAX_NODES = 30
+MAX_NODES = 50  # 提升节点上限，覆盖大型仓库
 TEST_PREFIXES = ("test_", "tests/", "docs_src/", "docs/", "scripts/", "benchmarks/")
 
 
@@ -149,7 +198,7 @@ def generate_mermaid(files: list[dict[str, Any]]) -> str:
 
     # 6) Add edges (only between selected nodes), limit per node
     edge_count: dict[str, int] = {}
-    MAX_EDGES_PER_NODE = 3
+    MAX_EDGES_PER_NODE = 5  # 每个节点最多 5 条边
     for src, tgt in sorted(edges_set):
         if src in selected and tgt in selected:
             if edge_count.get(src, 0) >= MAX_EDGES_PER_NODE:
@@ -184,3 +233,77 @@ def generate_learning_path(files: list[dict[str, Any]]) -> list[str]:
 
     ranked = sorted(files, key=score, reverse=True)
     return [f["path"] for f in ranked[:10]]
+
+
+def generate_dependency_graph(repo_path: Path) -> str:
+    """生成项目依赖关系图（Mermaid 格式）。"""
+    deps: dict[str, list[str]] = {}
+
+    # 解析 package.json
+    pkg_json = repo_path / "package.json"
+    if pkg_json.exists():
+        try:
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            prod = list(data.get("dependencies", {}).keys())
+            dev = list(data.get("devDependencies", {}).keys())
+            if prod:
+                deps["npm: dependencies"] = prod[:20]  # 限制数量
+            if dev:
+                deps["npm: devDependencies"] = dev[:15]
+        except Exception:
+            pass
+
+    # 解析 requirements.txt
+    req_txt = repo_path / "requirements.txt"
+    if req_txt.exists():
+        try:
+            lines = req_txt.read_text(encoding="utf-8").splitlines()
+            pkgs = []
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith("-"):
+                    # 提取包名（去掉版本号）
+                    name = re.split(r"[>=<!~\[]", line)[0].strip()
+                    if name:
+                        pkgs.append(name)
+            if pkgs:
+                deps["pip: requirements"] = pkgs[:20]
+        except Exception:
+            pass
+
+    # 解析 pyproject.toml
+    pyproject = repo_path / "pyproject.toml"
+    if pyproject.exists() and "pip: requirements" not in deps:
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+            # 简单提取 dependencies
+            m = re.search(r"dependencies\s*=\s*\[(.*?)\]", content, re.DOTALL)
+            if m:
+                pkgs = re.findall(r'"([^"]+)"', m.group(1))
+                if pkgs:
+                    deps["pip: pyproject"] = [re.split(r"[>=<!~\[]", p)[0].strip() for p in pkgs[:20]]
+        except Exception:
+            pass
+
+    if not deps:
+        return 'graph TD\n  A["未找到依赖文件（package.json / requirements.txt / pyproject.toml）"]'
+
+    # 生成 Mermaid
+    lines = ["graph LR"]
+    lines.append('  ROOT["📦 项目"]')
+
+    node_id = 0
+    for category, packages in deps.items():
+        cat_id = f"C{node_id}"
+        node_id += 1
+        lines.append(f'  {cat_id}["{category}"]')
+        lines.append(f'  ROOT --> {cat_id}')
+
+        for pkg in packages[:12]:  # 每类最多显示 12 个
+            safe = pkg.replace('"', "'")
+            pkg_id = f"N{node_id}"
+            node_id += 1
+            lines.append(f'  {pkg_id}["{safe}"]')
+            lines.append(f'  {cat_id} --> {pkg_id}')
+
+    return "\n".join(lines)

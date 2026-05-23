@@ -49,6 +49,44 @@ export default function MermaidView({ chart }: { chart: string }) {
 
   const close = useCallback(() => setZoomed(false), []);
 
+  function downloadSvg() {
+    if (!svgContent) return;
+    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'architecture.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadPng() {
+    if (!svgContent) return;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = () => {
+      canvas.width = svgSize.w * 2;
+      canvas.height = svgSize.h * 2;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const pngUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = 'architecture.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }
+
   useEffect(() => {
     if (!zoomed) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
@@ -65,13 +103,18 @@ export default function MermaidView({ chart }: { chart: string }) {
 
   return (
     <>
+      {svgContent && (
+        <div className="mermaid-export">
+          <button className="export-btn" onClick={downloadSvg}>下载 SVG</button>
+          <button className="export-btn" onClick={downloadPng}>下载 PNG</button>
+        </div>
+      )}
       <div
         ref={ref}
         className="mermaid-container"
         onClick={() => svgContent && setZoomed(true)}
         style={{ cursor: svgContent ? 'zoom-in' : 'default' }}
-      />
-      {zoomed && (
+      />      {zoomed && (
         <div className="mermaid-overlay" onClick={close}>
           <div
             className="mermaid-zoomed"
