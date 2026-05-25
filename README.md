@@ -1,4 +1,4 @@
-# Repo Insight MVP
+# Code AI Guide
 
 一个完全可运行的代码仓库智能理解系统。
 
