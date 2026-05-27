@@ -169,18 +169,118 @@ def find_import_target(import_name: str, files: list[dict[str, Any]]) -> str | N
     return None
 
 
-def generate_learning_path(files: list[dict[str, Any]]) -> list[str]:
-    priority_keywords = ["main", "app", "index", "server", "router", "controller", "service", "model", "schema"]
+def generate_learning_path(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """生成分阶段的学习路径，包含阶段描述、优先级等丰富元数据。"""
 
-    def score(file: dict[str, Any]) -> int:
+    # ── 阶段定义：按阅读顺序排列 ──
+    STAGES = [
+        {"name": "入口 & 配置", "order": 1,
+         "keywords": ["main", "app", "index", "config", "settings", "env", "bootstrap"]},
+        {"name": "路由 & 控制器", "order": 2,
+         "keywords": ["router", "controller", "route", "handler", "endpoint", "middleware", "api"]},
+        {"name": "核心服务", "order": 3,
+         "keywords": ["service", "core", "logic", "manager", "processor", "engine",
+                      "pipeline", "analyzer", "generator", "repo_service", "llm_service"]},
+        {"name": "数据模型", "order": 4,
+         "keywords": ["model", "schema", "entity", "type", "dto", "interface", "domain", "models"]},
+        {"name": "工具 & 辅助", "order": 5,
+         "keywords": ["util", "helper", "common", "lib", "utils", "tool", "constant",
+                      "exception", "error", "base"]},
+    ]
+
+    # ── 分类函数：将文件归入对应阶段 ──
+    def classify(file: dict[str, Any]) -> tuple[int, str]:
         path = file["path"].lower()
-        points = 0
-        for i, kw in enumerate(priority_keywords):
-            if kw in path:
-                points += 100 - i * 8
-        points += len(file.get("functions", [])) * 2
-        points += len(file.get("classes", [])) * 3
-        return points
+        for stage in STAGES:
+            for kw in stage["keywords"]:
+                if kw in path:
+                    return (stage["order"], stage["name"])
+        return (99, "其他模块")
 
-    ranked = sorted(files, key=score, reverse=True)
-    return [f["path"] for f in ranked[:10]]
+    # ── 描述生成：根据文件内容生成说明 ──
+    def describe(file: dict[str, Any], stage_name: str) -> str:
+        parts = []
+        funcs = file.get("functions", [])
+        classes = file.get("classes", [])
+        imports = file.get("imports", [])
+
+        desc_map = {
+            "入口 & 配置": "项目启动入口",
+            "路由 & 控制器": "处理请求路由",
+            "核心服务": "核心业务逻辑",
+            "数据模型": "数据结构定义",
+            "工具 & 辅助": "通用工具模块",
+            "其他模块": "补充模块",
+        }
+        parts.append(desc_map.get(stage_name, "补充模块"))
+
+        details = []
+        if classes:
+            details.append(f"{len(classes)}个类")
+        if funcs:
+            details.append(f"{len(funcs)}个函数")
+        if imports:
+            details.append(f"依赖{len(imports)}个模块")
+        if details:
+            parts.append("，".join(details))
+
+        return " · ".join(parts)
+
+    # ── 依赖计数：计算有多少其他文件引用了当前文件 ──
+    def calc_dependency_count(file: dict[str, Any]) -> int:
+        count = 0
+        for other in files:
+            if other["path"] == file["path"]:
+                continue
+            for imp in other.get("imports", []):
+                target = find_import_target(imp, files)
+                if target and target == file["path"]:
+                    count += 1
+                    break
+        return count
+
+    # ── 计分 & 分类 ──
+    scored: list[dict[str, Any]] = []
+    for f in files:
+        stage_order, stage_name = classify(f)
+        dep_count = calc_dependency_count(f)
+        func_count = len(f.get("functions", []))
+        class_count = len(f.get("classes", []))
+
+        # 优先级 = 被依赖数×10 + 类数×5 + 函数数×2 + 阶段系数
+        priority = dep_count * 10 + class_count * 5 + func_count * 2
+        priority += max(0, 100 - stage_order * 15)
+
+        scored.append({
+            "file_path": f["path"],
+            "stage": stage_name,
+            "stage_order": stage_order,
+            "priority": priority,
+            "description": describe(f, stage_name),
+        })
+
+    # ── 排序：先按阶段顺序，再按优先级 ──
+    scored.sort(key=lambda x: (x["stage_order"], -x["priority"]))
+
+    # ── 选取每个阶段的 Top N 文件 ──
+    STAGE_LIMITS = {1: 3, 2: 4, 3: 5, 4: 4, 5: 3, 99: 2}
+    result: list[dict[str, Any]] = []
+    stage_counts: dict[int, int] = {}
+
+    for item in scored:
+        so = item["stage_order"]
+        limit = STAGE_LIMITS.get(so, 2)
+        if stage_counts.get(so, 0) < limit:
+            stage_counts[so] = stage_counts.get(so, 0) + 1
+            result.append(item)
+
+    # ── 补齐至约 18 条 ──
+    remaining = [s for s in scored if not any(r["file_path"] == s["file_path"] for r in result)]
+    remaining.sort(key=lambda x: -x["priority"])
+    for item in remaining:
+        if len(result) >= 18:
+            break
+        result.append(item)
+
+    result.sort(key=lambda x: (x["stage_order"], -x["priority"]))
+    return result

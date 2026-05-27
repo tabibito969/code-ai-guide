@@ -7,12 +7,20 @@ import FileTree from '../components/FileTree';
 import MermaidView from '../components/MermaidView';
 import './globals.css';
 
+type LearningPathItem = {
+  file_path: string;
+  stage: string;
+  stage_order: number;
+  priority: number;
+  description: string;
+};
+
 type AnalyzeResult = {
   repo_id: string;
   tree: any[];
   files: any[];
   mermaid: string;
-  learning_path: string[];
+  learning_path: LearningPathItem[];
 };
 
 const API_BASE = 'http://localhost:8000';
@@ -62,6 +70,24 @@ export default function HomePage() {
     }
   }
 
+  function groupByStage(items: LearningPathItem[]) {
+    const groups: { stage: string; items: LearningPathItem[] }[] = [];
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (!seen.has(item.stage)) {
+        seen.add(item.stage);
+        groups.push({ stage: item.stage, items: [] });
+      }
+      groups[groups.length - 1].items.push(item);
+    }
+    return groups;
+  }
+
+  function shortName(filePath: string): string {
+    const parts = filePath.replace(/\\/g, '/').split('/');
+    return parts.length <= 2 ? filePath : parts.slice(-2).join('/');
+  }
+
   return (
     <main className="container">
       <section className="header">
@@ -85,9 +111,32 @@ export default function HomePage() {
             <h2>架构图</h2>
             <MermaidView chart={result.mermaid} />
             <h2>学习路径</h2>
-            <ol>
-              {result.learning_path.map((p) => <li key={p}><button className="tree-file" onClick={() => explain(p)}>{p}</button></li>)}
-            </ol>
+            <div className="learning-path">
+              {groupByStage(result.learning_path).map((group) => (
+                <div key={group.stage} className="path-stage">
+                  <h3 className="path-stage-title">
+                    <span className="stage-dot" />
+                    {group.stage}
+                  </h3>
+                  <ol className="path-list">
+                    {group.items.map((item) => (
+                      <li key={item.file_path} className="path-item">
+                        <button
+                          className="tree-file path-file-btn"
+                          onClick={() => explain(item.file_path)}
+                        >
+                          {shortName(item.file_path)}
+                        </button>
+                        <span className="path-desc">{item.description}</span>
+                        <span className="path-priority" title="优先级分数">
+                          {item.priority}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="card">

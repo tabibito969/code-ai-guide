@@ -328,3 +328,100 @@ pre {
 .markdown-content tr:nth-child(even) {
   background: #f9fafb;
 }
+
+/* 学习路径样式 */
+.learning-path {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.learning-path::-webkit-scrollbar {
+  width: 6px;
+}
+
+.learning-path::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.path-stage {
+  margin-bottom: 16px;
+}
+
+.path-stage:last-child {
+  margin-bottom: 0;
+}
+
+.path-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stage-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+}
+
+.path-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.path-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.path-item:hover {
+  background: #f3f4f6;
+}
+
+.path-file-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-desc {
+  flex: 1;
+  font-size: 11px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-priority {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 10px;
+}
